@@ -18,7 +18,9 @@ PATH = %W(
 def main
   setup_path_environment
 
+  $option = Hash.new false
   if File.basename($0) == "cygsmart" then
+    $option = consume
     wincmd = ARGV.shift
   else
     wincmd = File.basename($0)
@@ -44,6 +46,28 @@ def setup_path_environment
   end
 end
 
+def consume
+  option = Hash.new false
+
+  arg = ARGV.first
+  return option if arg[0, 1] != "-"
+
+  ARGV.shift
+
+  arg[1..-1].each_char do |char|
+    case char
+    when "c"
+      option["/c"] = true
+    when "k"
+      option["/k"] = true
+    when "r"
+      option["raw"] = true
+    end
+  end
+
+  return option
+end
+
 CYGPATH = "/usr/bin/cygpath"
 def cygpath_wa filename
   cmd = %x(#{CYGPATH} -wa #{filename}).chomp
@@ -59,32 +83,41 @@ def which filename
 end
 
 def compose_commandline wincmd, argv
-  command = which wincmd
+  fullpath_wincmd = which wincmd
   case
-  when File.file?("#{command}.bat")
-    command = "#{command}.bat"
-  when File.file?("#{command}.cmd")
-    command = "#{command}.cmd"
-  when File.file?("#{command}.exe")
-    command = "#{command}.exe"
-  when File.file?(command)
+  when File.file?("#{fullpath_wincmd}.bat")
+    realexe = "#{fullpath_wincmd}.bat"
+  when File.file?("#{fullpath_wincmd}.cmd")
+    realexe = "#{fullpath_wincmd}.cmd"
+  when File.file?("#{fullpath_wincmd}.exe")
+    realexe = "#{fullpath_wincmd}.exe"
+  when File.file?(fullpath_wincmd)
   else
-    raise "cannot execute #{command}"
+    raise "cannot execute #{fullpath_wincmd}"
   end
 
   case wincmd
   when *SHOW_ANOTHER_WINDOW
-    cmd = cygpath_ua ENV["COMSPEC"].gsub("\\", "\\\\\\")
-    command = cygpath_wa command
     if wincmd == "cmd" then
-      arguments = [%(/usr/bin/cygstart #{cmd} /c #{command})]
+      $option["/c"] = true
     else
-      arguments = [%(/usr/bin/cygstart #{cmd} /k #{command})]
+      $option["/k"] = true
     end
-  else
-    arguments = ["\"#{command}\""]
   end
 
+  cmd = cygpath_ua ENV["COMSPEC"].gsub("\\", "\\\\\\")
+  winexe= cygpath_wa realexe
+  if $option["/c"] then
+    arguments = [%(/usr/bin/cygstart #{cmd} /c #{winexe})]
+  elsif $option["/k"] then
+    arguments = [%(/usr/bin/cygstart #{cmd} /k #{winexe})]
+  else
+    arguments = ["\"#{realexe}\""]
+  end
+
+  if $option["raw"] then
+    return argv.join(" ")
+  end
 
   until argv.empty?
     argument = argv.shift
