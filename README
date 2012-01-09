@@ -1,0 +1,43 @@
+CygSmart is a tool to invoke Windows command with Cygwin environment.
+
+Although we can execute Windows command in Cygwin,
+there are many problems like:
+  Windows pathnames are different from Cygwin path
+  Windows does not use UTF-8, the output is broken.
+
+CygSmart solves both of the problems.
+
+You can use CygSmart to invoke Windows command with Cygwin Path arguments,
+and to show converted UTF-8 text not broken Windows-31J text.
+
+Example to use:
+      > cygsmart ping localhost
+      
+      computer [::1]に ping を送信しています 32 バイトのデータ:
+      ::1 からの応答: 時間 <1ms
+      ::1 からの応答: 時間 <1ms
+      ::1 からの応答: 時間 <1ms
+      ::1 からの応答: 時間 <1ms
+      
+      ::1 の ping 統計:
+          パケット数: 送信 = 4、受信 = 4、損失 = 0 (0% の損失)、
+      ラウンド トリップの概算時間 (ミリ秒):
+          最小 = 0ms、最大 = 0ms、平均 = 0ms
+
+      > ln -s cygsmart ping
+      > ./ping localhost
+
+      computer [::1]に ping を送信しています 32 バイトのデータ:
+      ::1 からの応答: 時間 <1ms
+      ::1 からの応答: 時間 <1ms
+      ::1 からの応答: 時間 <1ms
+      ::1 からの応答: 時間 <1ms
+      
+      ::1 の ping 統計:
+          パケット数: 送信 = 4、受信 = 4、損失 = 0 (0% の損失)、
+      ラウンド トリップの概算時間 (ミリ秒):
+          最小 = 0ms、最大 = 0ms、平均 = 0ms
+
+      > cygsmart notepad /etc/fstab
+
+      > cygsmart netsh # popup new window of netsh

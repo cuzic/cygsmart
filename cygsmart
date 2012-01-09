@@ -1,0 +1,153 @@
+#!/usr/bin/env ruby
+# -*- encoding: sjis -*-
+require 'nkf'
+require 'open3'
+
+BLOCK_SIZE     = 1048576
+NKF_TO_WINDOWS = "--sjis"
+SHOW_ANOTHER_WINDOW = ["netsh", "nslookup", "cmd" ]
+
+PATH = %W(
+    /cygdrive/c/Android/android-sdk/tools
+    /cygdrive/c/Android/android-sdk/platform-tools
+    /cygdrive/c/Program\ Files/Oracle/VirtualBox/
+    /cygdrive/c/Program\ Files/Aspell/bin/
+    /cygdrive/c/Program\ Files/ruby-1.8/bin/
+  )
+
+def main
+  setup_path_environment
+
+  if File.basename($0) == "cygsmart" then
+    wincmd = ARGV.shift
+  else
+    wincmd = File.basename($0)
+  end
+
+  cmdline = compose_commandline wincmd, ARGV
+
+  if cmdline.include?("cygstart") then
+    system(cmdline)
+    exit
+  end
+  execute cmdline
+end
+
+def setup_path_environment
+  self_filename = File.expand_path(File.dirname(__FILE__))
+  ENV["PATH"] = ENV["PATH"].gsub(self_filename + ":", "").
+      gsub("/usr/bin:","").
+      gsub("/bin:","")
+
+  ENV["PATH"] = PATH.inject(ENV["PATH"]) do |memo, path|
+    memo + ":" + path
+  end
+end
+
+CYGPATH = "/usr/bin/cygpath"
+def cygpath_wa filename
+  cmd = %x(#{CYGPATH} -wa #{filename}).chomp
+  %("#{cmd}")
+end
+
+def cygpath_ua filename
+  %x(#{CYGPATH} -ua #{filename}).chomp
+end
+
+def which filename
+  %x(/usr/bin/which #{filename}).chomp
+end
+
+def compose_commandline wincmd, argv
+  command = which wincmd
+  case
+  when File.file?("#{command}.bat")
+    command = "#{command}.bat"
+  when File.file?("#{command}.cmd")
+    command = "#{command}.cmd"
+  when File.file?("#{command}.exe")
+    command = "#{command}.exe"
+  when File.file?(command)
+  else
+    raise "cannot execute #{command}"
+  end
+
+  case wincmd
+  when *SHOW_ANOTHER_WINDOW
+    cmd = cygpath_ua ENV["COMSPEC"].gsub("\\", "\\\\\\")
+    command = cygpath_wa command
+    if wincmd == "cmd" then
+      arguments = [%(/usr/bin/cygstart #{cmd} /c #{command})]
+    else
+      arguments = [%(/usr/bin/cygstart #{cmd} /k #{command})]
+    end
+  else
+    arguments = ["\"#{command}\""]
+  end
+
+
+  until argv.empty?
+    argument = argv.shift
+    case argument
+    when "--"
+      arguments << argv.shift
+    when /^-/
+      arguments << argument
+    when %r(^/)
+      if File.file? argument then
+        arguments << cygpath_wa(argument)
+      else
+        arguments << argument
+      end
+    else
+      if argument.include?("/") and
+        not argument.include?(":") then
+        arguments << cygpath_wa(argument)
+      else
+        arguments << argument
+      end
+    end
+  end
+
+  return arguments.join(" ")
+end
+
+def execute cmdline
+  Open3.popen3(cmdline) do |stdin, stdout, stderr, wait_thr|
+    loop do
+      begin
+        convert stdin, stdout, stderr
+      rescue Errno::EAGAIN => e
+        sleep 0.1
+        next
+      rescue EOFError => e
+        break
+      end
+    end
+  end
+end
+
+def convert stdin, stdout, stderr
+  rs, = IO.select([stdout, stderr, $stdin], nil, nil, 1)
+  if rs.nil? then
+    sleep 0.1
+    return
+  end
+  rs.each do |r|
+    buffer = r.read_nonblock(BLOCK_SIZE)
+    if r == stdout then
+      $stdout.write NKF.nkf("--utf8", buffer)
+    elsif r == stderr then
+      $stderr.write NKF.nkf("--utf8", buffer)
+    elsif r == $stdin then
+      stdin.write NKF.nkf(NKF_TO_WINDOWS, $stdin.read_nonblock(BLOCK_SIZE))
+    else
+      raise "unexpected"
+    end
+  end
+end
+
+if $0 == __FILE__ then
+  main
+end
+
