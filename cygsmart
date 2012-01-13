@@ -37,9 +37,6 @@ end
 
 def setup_path_environment
   self_filename = File.expand_path(File.dirname(__FILE__))
-  ENV["PATH"] = ENV["PATH"].gsub(self_filename + ":", "").
-      gsub("/usr/bin:","").
-      gsub("/bin:","")
 
   ENV["PATH"] = PATH.inject(ENV["PATH"]) do |memo, path|
     memo + ":" + path
@@ -69,8 +66,8 @@ def consume
 end
 
 CYGPATH = "/usr/bin/cygpath"
-def cygpath_wa filename
-  cmd = %x(#{CYGPATH} -wa #{filename}).chomp
+def cygpath_ma filename
+  cmd = %x(#{CYGPATH} -ma #{filename}).chomp
   %("#{cmd}")
 end
 
@@ -78,24 +75,46 @@ def cygpath_ua filename
   %x(#{CYGPATH} -ua #{filename}).chomp
 end
 
-def which filename
-  %x(/usr/bin/which #{filename}).chomp
+def where filename
+  glob = ENV["PATH"].gsub(":",",")
+  glob = "{#{glob}}/#{filename}"
+  Dir[glob].each do |candidate|
+    yield candidate
+  end
+end
+
+def realexe basename
+  %w(.bat .cmd .exe).each do |suffix|
+    filename = "#{basename}#{suffix}"
+
+    where(filename) do |candidate|
+      if suffix == ".bat" or suffix == ".cmd" then
+        return invoking_command candidate
+      end
+      filetype = %x(/usr/bin/file #{candidate})
+      if filetype.include?("Windows") or
+        filetype.include?("MS DOS") then
+        ldd = %x(/usr/bin/ldd #{candidate})
+        next if ldd.include?("cygwin1.dll")
+        return invoking_command candidate
+      end
+    end
+  end
+end
+
+def invoking_command filename
+  winexe = cygpath_ma filename
+  cmd = cygpath_ua "$COMSPEC"
+  if $option["/c"] then
+    return %(/usr/bin/cygstart #{cmd} /c #{winexe})
+  elsif $option["/k"] then
+    return %(/usr/bin/cygstart #{cmd} /k #{winexe})
+  else
+    return "\"#{winexe}\""
+  end
 end
 
 def compose_commandline wincmd, argv
-  fullpath_wincmd = which wincmd
-  case
-  when File.file?("#{fullpath_wincmd}.bat")
-    realexe = "#{fullpath_wincmd}.bat"
-  when File.file?("#{fullpath_wincmd}.cmd")
-    realexe = "#{fullpath_wincmd}.cmd"
-  when File.file?("#{fullpath_wincmd}.exe")
-    realexe = "#{fullpath_wincmd}.exe"
-  when File.file?(fullpath_wincmd)
-  else
-    raise "cannot execute #{fullpath_wincmd}"
-  end
-
   case wincmd
   when *SHOW_ANOTHER_WINDOW
     if wincmd == "cmd" then
@@ -105,15 +124,7 @@ def compose_commandline wincmd, argv
     end
   end
 
-  cmd = cygpath_ua ENV["COMSPEC"].gsub("\\", "\\\\\\")
-  winexe= cygpath_wa realexe
-  if $option["/c"] then
-    arguments = [%(/usr/bin/cygstart #{cmd} /c #{winexe})]
-  elsif $option["/k"] then
-    arguments = [%(/usr/bin/cygstart #{cmd} /k #{winexe})]
-  else
-    arguments = ["\"#{realexe}\""]
-  end
+  arguments = [realexe wincmd]
 
   if $option["raw"] then
     return argv.join(" ")
@@ -151,10 +162,11 @@ def execute cmdline
       begin
         convert stdin, stdout, stderr
       rescue Errno::EAGAIN => e
-        sleep 0.1
         next
       rescue EOFError => e
         break
+      ensure
+        sleep 0.1
       end
     end
   end
@@ -162,16 +174,13 @@ end
 
 def convert stdin, stdout, stderr
   rs, = IO.select([stdout, stderr, $stdin], nil, nil, 1)
-  if rs.nil? then
-    sleep 0.1
-    return
-  end
+  return if rs.nil?
   rs.each do |r|
     buffer = r.read_nonblock(BLOCK_SIZE)
     if r == stdout then
-      $stdout.write NKF.nkf("--utf8", buffer)
+      $stdout.write NKF.nkf("--utf8 -Lu", buffer)
     elsif r == stderr then
-      $stderr.write NKF.nkf("--utf8", buffer)
+      $stderr.write NKF.nkf("--utf8 -Lu", buffer)
     elsif r == $stdin then
       stdin.write NKF.nkf(NKF_TO_WINDOWS, $stdin.read_nonblock(BLOCK_SIZE))
     else
