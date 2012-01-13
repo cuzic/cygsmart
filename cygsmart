@@ -91,11 +91,15 @@ def realexe basename
       if suffix == ".bat" or suffix == ".cmd" then
         return invoking_command candidate
       end
+      ldd = %x(/usr/bin/ldd #{candidate})
+      next if ldd.include?("cygwin1.dll")
+
       filetype = %x(/usr/bin/file #{candidate})
       if filetype.include?("Windows") or
         filetype.include?("MS DOS") then
-        ldd = %x(/usr/bin/ldd #{candidate})
-        next if ldd.include?("cygwin1.dll")
+        if filetype.include?("GUI") then
+          $option["GUI"] = true
+        end
         return invoking_command candidate
       end
     end
@@ -109,6 +113,8 @@ def invoking_command filename
     return %(/usr/bin/cygstart #{cmd} /c #{winexe})
   elsif $option["/k"] then
     return %(/usr/bin/cygstart #{cmd} /k #{winexe})
+  elsif $option["GUI"] then
+    return %(/usr/bin/cygstart #{filename})
   else
     return "\"#{winexe}\""
   end
@@ -139,7 +145,7 @@ def compose_commandline wincmd, argv
       arguments << argument
     when %r(^/)
       if File.file? argument then
-        arguments << cygpath_wa(argument)
+        arguments << cygpath_ma(argument)
       else
         arguments << argument
       end

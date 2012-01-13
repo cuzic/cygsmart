@@ -8,9 +8,11 @@ there are many problems like:
 CygSmart solves both of the problems.
 
 You can use CygSmart to invoke Windows command with Cygwin Path arguments,
-and to show converted UTF-8 text not broken Windows-31J text.
+and to show converted UTF-8 text not broken SJIS text.
 
 Example to use:
+      # Automagically encode from SJIS to UTF-8
+      # You can see readable text on Cygwin Window
       > cygsmart ping localhost
       
       computer [::1]に ping を送信しています 32 バイトのデータ:
@@ -38,6 +40,21 @@ Example to use:
       ラウンド トリップの概算時間 (ミリ秒):
           最小 = 0ms、最大 = 0ms、平均 = 0ms
 
-      > cygsmart notepad /etc/fstab
+      > cygsmart notepad ~/.zshrc
+      # equivalent with :
+      #  cygstart c:/Windows/notepad.exe "$(cygpath -ma .zshrc)"
+      # if the executable is GUI command,
+      # invoke it with `cygstart'
 
       > cygsmart netsh # popup new window of netsh
+
+      # symbolic link is very useful
+      > cp cygsmart $HOME/bin
+      > cd $HOME/bin
+      > ln -s cygsmart ping
+      > ln -s cygsmart nslookup
+      > ln -s cygsmart ipconfig
+      > ln -s cygsmart notepad
+      > ln -s cygsmart netstat
+      > ping 8.8.8.8 # you can ping shortly
+
